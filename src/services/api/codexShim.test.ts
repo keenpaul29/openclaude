@@ -72,7 +72,7 @@ describe('Codex provider config', () => {
 })
 
 describe('Codex request translation', () => {
-  test('disables strict mode for tools with optional parameters', () => {
+  test('normalizes optional parameters into strict Responses schemas', () => {
     const tools = convertToolsToResponsesTools([
       {
         name: 'Agent',
@@ -102,9 +102,10 @@ describe('Codex request translation', () => {
             prompt: { type: 'string' },
             subagent_type: { type: 'string' },
           },
-          required: ['description', 'prompt'],
+          required: ['description', 'prompt', 'subagent_type'],
           additionalProperties: false,
         },
+        strict: true,
       },
     ])
   })
