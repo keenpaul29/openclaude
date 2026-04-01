@@ -2,6 +2,16 @@
 import { spawn } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import {
+  getGoalDefaultOpenAIModel,
+  normalizeRecommendationGoal,
+  recommendOllamaModel,
+} from '../src/utils/providerRecommendation.ts'
+import {
+  getOllamaChatBaseUrl,
+  hasLocalOllama,
+  listOllamaModels,
+} from './provider-discovery.ts'
 
 type ProviderProfile = 'openai' | 'ollama'
 
@@ -18,17 +28,26 @@ type LaunchOptions = {
   requestedProfile: ProviderProfile | 'auto' | null
   passthroughArgs: string[]
   fast: boolean
+  goal: ReturnType<typeof normalizeRecommendationGoal>
 }
 
 function parseLaunchOptions(argv: string[]): LaunchOptions {
   let requestedProfile: ProviderProfile | 'auto' | null = 'auto'
   const passthroughArgs: string[] = []
   let fast = false
+  let goal = normalizeRecommendationGoal(process.env.OPENCLAUDE_PROFILE_GOAL)
 
-  for (const arg of argv) {
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]!
     const lower = arg.toLowerCase()
     if (lower === '--fast') {
       fast = true
+      continue
+    }
+
+    if (lower === '--goal') {
+      goal = normalizeRecommendationGoal(argv[i + 1] ?? null)
+      i++
       continue
     }
 
@@ -54,6 +73,7 @@ function parseLaunchOptions(argv: string[]): LaunchOptions {
     requestedProfile,
     passthroughArgs,
     fast,
+    goal,
   }
 }
 
@@ -71,18 +91,12 @@ function loadPersistedProfile(): ProfileFile | null {
   }
 }
 
-async function hasLocalOllama(): Promise<boolean> {
-  const endpoint = 'http://localhost:11434/api/tags'
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 1200)
-  try {
-    const response = await fetch(endpoint, { signal: controller.signal })
-    return response.ok
-  } catch {
-    return false
-  } finally {
-    clearTimeout(timeout)
-  }
+async function resolveOllamaDefaultModel(
+  goal: ReturnType<typeof normalizeRecommendationGoal>,
+): Promise<string> {
+  const models = await listOllamaModels()
+  const recommended = recommendOllamaModel(models, goal)
+  return recommended?.name || process.env.OPENAI_MODEL || 'llama3.1:8b'
 }
 
 function runCommand(command: string, env: NodeJS.ProcessEnv): Promise<number> {
@@ -99,7 +113,11 @@ function runCommand(command: string, env: NodeJS.ProcessEnv): Promise<number> {
   })
 }
 
-function buildEnv(profile: ProviderProfile, persisted: ProfileFile | null): NodeJS.ProcessEnv {
+async function buildEnv(
+  profile: ProviderProfile,
+  persisted: ProfileFile | null,
+  goal: ReturnType<typeof normalizeRecommendationGoal>,
+): Promise<NodeJS.ProcessEnv> {
   const persistedEnv = persisted?.env ?? {}
   const env: NodeJS.ProcessEnv = {
     ...process.env,
@@ -107,8 +125,14 @@ function buildEnv(profile: ProviderProfile, persisted: ProfileFile | null): Node
   }
 
   if (profile === 'ollama') {
-    env.OPENAI_BASE_URL = persistedEnv.OPENAI_BASE_URL || process.env.OPENAI_BASE_URL || 'http://localhost:11434/v1'
-    env.OPENAI_MODEL = persistedEnv.OPENAI_MODEL || process.env.OPENAI_MODEL || 'llama3.1:8b'
+    env.OPENAI_BASE_URL =
+      persistedEnv.OPENAI_BASE_URL ||
+      process.env.OPENAI_BASE_URL ||
+      getOllamaChatBaseUrl()
+    env.OPENAI_MODEL =
+      persistedEnv.OPENAI_MODEL ||
+      process.env.OPENAI_MODEL ||
+      await resolveOllamaDefaultModel(goal)
     if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'SUA_CHAVE') {
       delete env.OPENAI_API_KEY
     }
@@ -116,7 +140,10 @@ function buildEnv(profile: ProviderProfile, persisted: ProfileFile | null): Node
   }
 
   env.OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || persistedEnv.OPENAI_BASE_URL || 'https://api.openai.com/v1'
-  env.OPENAI_MODEL = process.env.OPENAI_MODEL || persistedEnv.OPENAI_MODEL || 'gpt-4o'
+  env.OPENAI_MODEL =
+    process.env.OPENAI_MODEL ||
+    persistedEnv.OPENAI_MODEL ||
+    getGoalDefaultOpenAIModel(goal)
   env.OPENAI_API_KEY = process.env.OPENAI_API_KEY || persistedEnv.OPENAI_API_KEY
   return env
 }
@@ -165,7 +192,7 @@ async function main(): Promise<void> {
     profile = requestedProfile
   }
 
-  const env = buildEnv(profile, persisted)
+  const env = await buildEnv(profile, persisted, options.goal)
   if (options.fast) {
     applyFastFlags(env)
   }

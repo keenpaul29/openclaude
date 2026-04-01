@@ -1,6 +1,16 @@
 // @ts-nocheck
 import { writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import {
+  getGoalDefaultOpenAIModel,
+  normalizeRecommendationGoal,
+  recommendOllamaModel,
+} from '../src/utils/providerRecommendation.ts'
+import {
+  getOllamaChatBaseUrl,
+  hasLocalOllama,
+  listOllamaModels,
+} from './provider-discovery.ts'
 
 type ProviderProfile = 'openai' | 'ollama'
 
@@ -27,27 +37,25 @@ function parseProviderArg(): ProviderProfile | 'auto' {
   return 'auto'
 }
 
-async function hasLocalOllama(): Promise<boolean> {
-  const endpoint = 'http://localhost:11434/api/tags'
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 1200)
-
-  try {
-    const response = await fetch(endpoint, {
-      method: 'GET',
-      signal: controller.signal,
-    })
-    return response.ok
-  } catch {
-    return false
-  } finally {
-    clearTimeout(timeout)
-  }
-}
-
 function sanitizeApiKey(key: string | null): string | undefined {
   if (!key || key === 'SUA_CHAVE') return undefined
   return key
+}
+
+async function resolveOllamaModel(
+  argModel: string | null,
+  argBaseUrl: string | null,
+  goal: ReturnType<typeof normalizeRecommendationGoal>,
+): Promise<string> {
+  if (argModel) return argModel
+
+  const discovered = await listOllamaModels(argBaseUrl || undefined)
+  const recommended = recommendOllamaModel(discovered, goal)
+  if (recommended) {
+    return recommended.name
+  }
+
+  return process.env.OPENAI_MODEL || 'llama3.1:8b'
 }
 
 async function main(): Promise<void> {
@@ -55,23 +63,29 @@ async function main(): Promise<void> {
   const argModel = parseArg('--model')
   const argBaseUrl = parseArg('--base-url')
   const argApiKey = parseArg('--api-key')
+  const goal = normalizeRecommendationGoal(
+    parseArg('--goal') || process.env.OPENCLAUDE_PROFILE_GOAL,
+  )
 
   let selected: ProviderProfile
   if (provider === 'auto') {
-    selected = (await hasLocalOllama()) ? 'ollama' : 'openai'
+    selected = (await hasLocalOllama(argBaseUrl || undefined)) ? 'ollama' : 'openai'
   } else {
     selected = provider
   }
 
   const env: ProfileFile['env'] = {}
   if (selected === 'ollama') {
-    env.OPENAI_BASE_URL = argBaseUrl || 'http://localhost:11434/v1'
-    env.OPENAI_MODEL = argModel || process.env.OPENAI_MODEL || 'llama3.1:8b'
+    env.OPENAI_BASE_URL = getOllamaChatBaseUrl(argBaseUrl || undefined)
+    env.OPENAI_MODEL = await resolveOllamaModel(argModel, argBaseUrl, goal)
     const key = sanitizeApiKey(argApiKey || process.env.OPENAI_API_KEY || null)
     if (key) env.OPENAI_API_KEY = key
   } else {
     env.OPENAI_BASE_URL = argBaseUrl || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1'
-    env.OPENAI_MODEL = argModel || process.env.OPENAI_MODEL || 'gpt-4o'
+    env.OPENAI_MODEL =
+      argModel ||
+      process.env.OPENAI_MODEL ||
+      getGoalDefaultOpenAIModel(goal)
     const key = sanitizeApiKey(argApiKey || process.env.OPENAI_API_KEY || null)
     if (!key) {
       console.error('OpenAI profile requires a real API key. Use --api-key or set OPENAI_API_KEY.')
@@ -90,6 +104,8 @@ async function main(): Promise<void> {
   writeFileSync(outputPath, JSON.stringify(profile, null, 2), 'utf8')
 
   console.log(`Saved profile: ${selected}`)
+  console.log(`Goal: ${goal}`)
+  console.log(`Model: ${profile.env.OPENAI_MODEL}`)
   console.log(`Path: ${outputPath}`)
   console.log('Next: bun run dev:profile')
 }

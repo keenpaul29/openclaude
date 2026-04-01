@@ -206,11 +206,20 @@ Use profile launchers to avoid repeated environment setup:
 # one-time profile bootstrap (auto-detect ollama, otherwise openai)
 bun run profile:init
 
+# preview the best provider/model for your goal
+bun run profile:recommend -- --goal coding --benchmark
+
+# auto-apply the best available profile for your goal
+bun run profile:auto -- --goal latency
+
 # openai bootstrap with explicit key
 bun run profile:init -- --provider openai --api-key sk-...
 
 # ollama bootstrap with custom model
 bun run profile:init -- --provider ollama --model llama3.1:8b
+
+# ollama bootstrap with intelligent model auto-selection
+bun run profile:init -- --provider ollama --goal coding
 
 # launch using persisted profile (.openclaude-profile.json)
 bun run dev:profile
@@ -221,6 +230,9 @@ bun run dev:openai
 # Ollama profile (defaults: localhost:11434, llama3.1:8b)
 bun run dev:ollama
 ```
+
+`profile:recommend` ranks installed Ollama models for `latency`, `balanced`, or `coding`, and `profile:auto` can persist the recommendation directly.
+If no profile exists yet, `dev:profile` now uses the same goal-aware defaults when picking the initial model.
 
 `dev:openai` and `dev:ollama` run `doctor:runtime` first and only launch the app if checks pass.
 For `dev:ollama`, make sure Ollama is running locally before launch.

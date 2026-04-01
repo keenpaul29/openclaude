@@ -37,6 +37,18 @@ If everything is healthy, OpenClaude starts directly.
 bun run profile:init -- --provider ollama --model llama3.1:8b
 ```
 
+Or let OpenClaude recommend the best local model for your goal:
+
+```powershell
+bun run profile:init -- --provider ollama --goal coding
+```
+
+Preview recommendations before saving:
+
+```powershell
+bun run profile:recommend -- --goal coding --benchmark
+```
+
 ### 3.2 Confirm profile file
 
 ```powershell
@@ -171,6 +183,12 @@ Fix:
 bun run profile:init -- --provider ollama --model llama3.1:8b
 ```
 
+Or auto-pick a local profile:
+
+```powershell
+bun run profile:auto -- --goal balanced
+```
+
 ## 6.5 Placeholder key (`SUA_CHAVE`) error
 
 Cause:
@@ -200,6 +218,14 @@ Preset shortcuts already configured:
 ```powershell
 bun run profile:fast   # llama3.2:3b
 bun run profile:code   # qwen2.5-coder:7b
+```
+
+Goal-based auto-selection:
+
+```powershell
+bun run profile:auto -- --goal latency
+bun run profile:auto -- --goal balanced
+bun run profile:auto -- --goal coding
 ```
 
 ## 8. Practical Prompt Playbook (Copy/Paste)
