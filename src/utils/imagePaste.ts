@@ -38,22 +38,7 @@ export const LINUX_CLIPBOARD_IMAGE_MIME_TYPES = [
   'image/bmp',
 ]
 
-export function buildLinuxClipboardCheckCommand(): string {
-  const mimePattern = LINUX_CLIPBOARD_IMAGE_MIME_TYPES.map(mimeType =>
-    mimeType.replace('/', '\\/'),
-  ).join('|')
-
-  return `xclip -selection clipboard -t TARGETS -o 2>/dev/null | grep -E "${mimePattern}" || wl-paste -l 2>/dev/null | grep -E "${mimePattern}"`
-}
-
-export function buildLinuxClipboardSaveCommand(screenshotPath: string): string {
-  return LINUX_CLIPBOARD_IMAGE_MIME_TYPES.flatMap(mimeType => [
-    `xclip -selection clipboard -t ${mimeType} -o > "${screenshotPath}" 2>/dev/null`,
-    `wl-paste --type ${mimeType} > "${screenshotPath}" 2>/dev/null`,
-  ]).join(' || ')
-}
-
-function getClipboardCommands() {
+function getScreenshotPath(): string {
   const platform = process.platform as SupportedPlatform
 
   // Platform-specific temporary file paths
@@ -68,45 +53,39 @@ function getClipboardCommands() {
     win32: join(baseTmpDir, screenshotFilename),
   }
 
-  const screenshotPath = tempPaths[platform] || tempPaths.linux
-
-  // Platform-specific clipboard commands
-  const commands: Record<
-    SupportedPlatform,
-    {
-      checkImage: string
-      saveImage: string
-      getPath: string
-      deleteFile: string
-    }
-  > = {
-    darwin: {
-      checkImage: `osascript -e 'the clipboard as «class PNGf»'`,
-      saveImage: `osascript -e 'set png_data to (the clipboard as «class PNGf»)' -e 'set fp to open for access POSIX file "${screenshotPath}" with write permission' -e 'write png_data to fp' -e 'close access fp'`,
-      getPath: `osascript -e 'get POSIX path of (the clipboard as «class furl»)'`,
-      deleteFile: `rm -f "${screenshotPath}"`,
-    },
-    linux: {
-      checkImage: buildLinuxClipboardCheckCommand(),
-      saveImage: buildLinuxClipboardSaveCommand(screenshotPath),
-      getPath:
-        'xclip -selection clipboard -t text/plain -o 2>/dev/null || wl-paste 2>/dev/null',
-      deleteFile: `rm -f "${screenshotPath}"`,
-    },
-    win32: {
-      checkImage:
-        'powershell -NoProfile -Command "(Get-Clipboard -Format Image) -ne $null"',
-      saveImage: `powershell -NoProfile -Command "$img = Get-Clipboard -Format Image; if ($img) { $img.Save('${screenshotPath.replace(/\\/g, '\\\\')}', [System.Drawing.Imaging.ImageFormat]::Png) }"`,
-      getPath: 'powershell -NoProfile -Command "Get-Clipboard"',
-      deleteFile: `del /f "${screenshotPath}"`,
-    },
-  }
-
-  return {
-    commands: commands[platform] || commands.linux,
-    screenshotPath,
-  }
+  return tempPaths[platform] || tempPaths.linux
 }
+
+async function checkLinuxClipboardImage(): Promise<boolean> {
+  const mimePattern = LINUX_CLIPBOARD_IMAGE_MIME_TYPES.join('|')
+
+  // Try xclip
+  let result = await execFileNoThrowWithCwd('xclip', [
+    '-selection',
+    'clipboard',
+    '-t',
+    'TARGETS',
+    '-o',
+  ])
+  if (
+    result.code === 0 &&
+    new RegExp(mimePattern, 'i').test(result.stdout || '')
+  ) {
+    return true
+  }
+
+  // Try wl-paste
+  result = await execFileNoThrowWithCwd('wl-paste', ['-l'])
+  if (
+    result.code === 0 &&
+    new RegExp(mimePattern, 'i').test(result.stdout || '')
+  ) {
+    return true
+  }
+
+  return false
+}
+
 
 export type ImageWithDimensions = {
   base64: string
@@ -207,24 +186,103 @@ export async function getImageFromClipboard(): Promise<ImageWithDimensions | nul
     }
   }
 
-  const { commands, screenshotPath } = getClipboardCommands()
+  const screenshotPath = getScreenshotPath()
   try {
     // Check if clipboard has image
-    const checkResult = await execa(commands.checkImage, {
-      shell: true,
-      reject: false,
-    })
-    if (checkResult.exitCode !== 0) {
-      return null
-    }
+    if (process.platform === 'darwin') {
+      const checkResult = await execFileNoThrowWithCwd('osascript', [
+        '-e',
+        'the clipboard as «class PNGf»',
+      ])
+      if (checkResult.code !== 0) {
+        return null
+      }
 
-    // Save the image
-    const saveResult = await execa(commands.saveImage, {
-      shell: true,
-      reject: false,
-    })
-    if (saveResult.exitCode !== 0) {
-      return null
+      // Save the image
+      // AppleScript POSIX file path needs double quotes, and internal double quotes escaped.
+      const escapedPath = screenshotPath.replace(/"/g, '\\"')
+      const saveResult = await execFileNoThrowWithCwd('osascript', [
+        '-e',
+        'set png_data to (the clipboard as «class PNGf»)',
+        '-e',
+        `set fp to open for access POSIX file "${escapedPath}" with write permission`,
+        '-e',
+        'write png_data to fp',
+        '-e',
+        'close access fp',
+      ])
+      if (saveResult.code !== 0) {
+        return null
+      }
+    } else if (process.platform === 'win32') {
+      const checkResult = await execFileNoThrowWithCwd('powershell', [
+        '-NoProfile',
+        '-Command',
+        '(Get-Clipboard -Format Image) -ne $null',
+      ])
+      if (checkResult.code !== 0 || checkResult.stdout.trim() !== 'True') {
+        return null
+      }
+
+      // Save the image
+      // PowerShell string needs single quotes escaped by doubling them.
+      const escapedPath = screenshotPath.replace(/'/g, "''")
+      const saveResult = await execFileNoThrowWithCwd('powershell', [
+        '-NoProfile',
+        '-Command',
+        `$img = Get-Clipboard -Format Image; if ($img) { $img.Save('${escapedPath}', [System.Drawing.Imaging.ImageFormat]::Png) }`,
+      ])
+      if (saveResult.code !== 0) {
+        return null
+      }
+    } else {
+      // Linux
+      if (!(await checkLinuxClipboardImage())) {
+        return null
+      }
+
+      // To save the image without shell redirections, we'd need to capture binary stdout.
+      // Since execFileNoThrowWithCwd currently returns a string (likely UTF-8 decoded),
+      // we'll use a safer execa call with shell: false for xclip/wl-paste and handle the redirection via Node.js
+      // if possible, but for now let's at least avoid the vulnerable commands object.
+      // Actually, execa can take a `stdout` option to redirect to a file.
+      let saved = false
+      for (const mimeType of LINUX_CLIPBOARD_IMAGE_MIME_TYPES) {
+        try {
+          // Try xclip
+          const xclipResult = await execa(
+            'xclip',
+            ['-selection', 'clipboard', '-t', mimeType, '-o'],
+            {
+              stdout: { file: screenshotPath },
+              reject: false,
+            },
+          )
+          if (xclipResult.exitCode === 0) {
+            saved = true
+            break
+          }
+
+          // Try wl-paste
+          const wlPasteResult = await execa(
+            'wl-paste',
+            ['--type', mimeType],
+            {
+              stdout: { file: screenshotPath },
+              reject: false,
+            },
+          )
+          if (wlPasteResult.exitCode === 0) {
+            saved = true
+            break
+          }
+        } catch {
+          continue
+        }
+      }
+      if (!saved) {
+        return null
+      }
     }
 
     // Read the image and convert to base64
@@ -253,7 +311,7 @@ export async function getImageFromClipboard(): Promise<ImageWithDimensions | nul
     const mediaType = detectImageFormatFromBase64(base64Image)
 
     // Cleanup (fire-and-forget, don't await)
-    void execa(commands.deleteFile, { shell: true, reject: false })
+    void getFsImplementation().rm(screenshotPath, { force: true })
 
     return {
       base64: base64Image,
@@ -266,15 +324,35 @@ export async function getImageFromClipboard(): Promise<ImageWithDimensions | nul
 }
 
 export async function getImagePathFromClipboard(): Promise<string | null> {
-  const { commands } = getClipboardCommands()
-
   try {
     // Try to get text from clipboard
-    const result = await execa(commands.getPath, {
-      shell: true,
-      reject: false,
-    })
-    if (result.exitCode !== 0 || !result.stdout) {
+    let result
+    if (process.platform === 'darwin') {
+      result = await execFileNoThrowWithCwd('osascript', [
+        '-e',
+        'get POSIX path of (the clipboard as «class furl»)',
+      ])
+    } else if (process.platform === 'win32') {
+      result = await execFileNoThrowWithCwd('powershell', [
+        '-NoProfile',
+        '-Command',
+        'Get-Clipboard',
+      ])
+    } else {
+      // Linux: Try xclip then wl-paste
+      result = await execFileNoThrowWithCwd('xclip', [
+        '-selection',
+        'clipboard',
+        '-t',
+        'text/plain',
+        '-o',
+      ])
+      if (result.code !== 0) {
+        result = await execFileNoThrowWithCwd('wl-paste', [])
+      }
+    }
+
+    if (result.code !== 0 || !result.stdout) {
       return null
     }
     return result.stdout.trim()
