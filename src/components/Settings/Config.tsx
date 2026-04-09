@@ -1110,13 +1110,31 @@ export function Config({
       return;
     }
     // Log any changes that were made
-    // TODO: Make these proper messages
     const formattedChanges: string[] = Object.entries(changes).map(([key, value_2]) => {
       logEvent('tengu_config_changed', {
         key: key as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
         value: value_2 as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
       });
-      return `Set ${key} to ${chalk.bold(value_2)}`;
+
+      if (key === 'Fast mode') {
+        return `${value_2 === 'ON' ? 'Enabled' : 'Disabled'} fast mode`;
+      }
+
+      if (typeof value_2 === 'boolean') {
+        const label = key === 'verbose' ? 'verbose output' : key.toLowerCase();
+        return `${value_2 ? 'Enabled' : 'Disabled'} ${label}`;
+      }
+
+      const label =
+        key === 'defaultPermissionMode'
+          ? 'default permission mode'
+          : key === 'teammateDefaultModel'
+            ? 'default teammate model'
+            : key === 'Default view'
+              ? 'default view'
+              : key;
+
+      return `Set ${label} to ${chalk.bold(value_2)}`;
     });
     // Check for API key changes
     // On homespace, ANTHROPIC_API_KEY is preserved in process.env for child
