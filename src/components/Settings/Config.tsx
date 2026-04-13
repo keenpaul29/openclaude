@@ -84,12 +84,23 @@ type Setting = (SettingBase & {
 const FAST_MODE_ON = 'ON';
 const FAST_MODE_OFF = 'OFF';
 
-const CONFIG_KEY_LABELS: Record<string, string> = {
+type ConfigKey =
+  | 'model'
+  | 'verbose'
+  | 'defaultPermissionMode'
+  | 'teammateDefaultModel'
+  | 'Default view'
+  | 'Fast mode'
+  | 'Use auto mode during plan';
+
+const CONFIG_KEY_LABELS: Record<ConfigKey, string> = {
+  model: 'model',
   verbose: 'verbose output',
   defaultPermissionMode: 'default permission mode',
   teammateDefaultModel: 'default teammate model',
   'Default view': 'default view',
   'Fast mode': 'fast mode',
+  'Use auto mode during plan': 'auto mode during plan',
 };
 
 type SubMenu = 'Theme' | 'Model' | 'TeammateModel' | 'ExternalIncludes' | 'OutputStyle' | 'ChannelDowngrade' | 'Language' | 'EnableAutoUpdates';
@@ -1127,7 +1138,7 @@ export function Config({
         value: value_2 as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
       });
 
-      const label = CONFIG_KEY_LABELS[key] || key.toLowerCase();
+      const label = (key in CONFIG_KEY_LABELS) ? CONFIG_KEY_LABELS[key as ConfigKey] : key;
 
       if (key === 'Fast mode') {
         return `${value_2 === FAST_MODE_ON ? 'Enabled' : 'Disabled'} ${label}`;
