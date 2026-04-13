@@ -81,6 +81,28 @@ type Setting = (SettingBase & {
   onChange(value: string): void;
   type: 'managedEnum';
 });
+const FAST_MODE_ON = 'ON';
+const FAST_MODE_OFF = 'OFF';
+
+type ConfigKey =
+  | 'model'
+  | 'verbose'
+  | 'defaultPermissionMode'
+  | 'teammateDefaultModel'
+  | 'Default view'
+  | 'Fast mode'
+  | 'Use auto mode during plan';
+
+const CONFIG_KEY_LABELS: Record<ConfigKey, string> = {
+  model: 'model',
+  verbose: 'verbose output',
+  defaultPermissionMode: 'default permission mode',
+  teammateDefaultModel: 'default teammate model',
+  'Default view': 'default view',
+  'Fast mode': 'fast mode',
+  'Use auto mode during plan': 'auto mode during plan',
+};
+
 type SubMenu = 'Theme' | 'Model' | 'TeammateModel' | 'ExternalIncludes' | 'OutputStyle' | 'ChannelDowngrade' | 'Language' | 'EnableAutoUpdates';
 export function Config({
   onClose,
@@ -363,7 +385,7 @@ export function Config({
         setChanges(prev_8 => ({
           ...prev_8,
           model: getFastModeModel(),
-          'Fast mode': 'ON'
+          'Fast mode': FAST_MODE_ON
         }));
       } else {
         setAppState(prev_9 => ({
@@ -372,7 +394,7 @@ export function Config({
         }));
         setChanges(prev_10 => ({
           ...prev_10,
-          'Fast mode': 'OFF'
+          'Fast mode': FAST_MODE_OFF
         }));
       }
     }
@@ -1116,25 +1138,17 @@ export function Config({
         value: value_2 as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
       });
 
+      const label = (key in CONFIG_KEY_LABELS) ? CONFIG_KEY_LABELS[key as ConfigKey] : key;
+
       if (key === 'Fast mode') {
-        return `${value_2 === 'ON' ? 'Enabled' : 'Disabled'} fast mode`;
+        return `${value_2 === FAST_MODE_ON ? 'Enabled' : 'Disabled'} ${label}`;
       }
 
       if (typeof value_2 === 'boolean') {
-        const label = key === 'verbose' ? 'verbose output' : key.toLowerCase();
         return `${value_2 ? 'Enabled' : 'Disabled'} ${label}`;
       }
 
-      const label =
-        key === 'defaultPermissionMode'
-          ? 'default permission mode'
-          : key === 'teammateDefaultModel'
-            ? 'default teammate model'
-            : key === 'Default view'
-              ? 'default view'
-              : key;
-
-      return `Set ${label} to ${chalk.bold(value_2)}`;
+      return `Set ${label} to ${chalk.bold(String(value_2))}`;
     });
     // Check for API key changes
     // On homespace, ANTHROPIC_API_KEY is preserved in process.env for child
