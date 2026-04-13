@@ -3,7 +3,6 @@ import { expect, test } from 'bun:test'
 import {
   INITIAL_STATE,
   parseMultipleKeypresses,
-  type ParsedKey,
 } from './parse-keypress.ts'
 import { InputEvent } from './events/input-event.ts'
 
@@ -13,9 +12,11 @@ function parseInputEvent(sequence: string): InputEvent {
   expect(items).toHaveLength(1)
 
   const item = items[0]
-  expect(item?.kind).toBe('key')
+  if (item?.kind !== 'key') {
+    throw new Error(`Expected key event, got ${item?.kind}`)
+  }
 
-  return new InputEvent(item as ParsedKey)
+  return new InputEvent(item)
 }
 
 test('treats CSI-u modifier 0 as unmodified printable input', () => {

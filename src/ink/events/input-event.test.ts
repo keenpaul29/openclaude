@@ -3,10 +3,15 @@ import { expect, test } from 'bun:test'
 import {
   INITIAL_STATE,
   parseMultipleKeypresses,
-  type ParsedKey,
 } from '../parse-keypress.ts'
 import { InputEvent } from './input-event.ts'
 
+/**
+ * Helper to simulate terminal input and convert it into InputEvent instances.
+ *
+ * Since the input parser is streaming, single ESC sequences might be buffered.
+ * Set `flush: true` to force the parser to emit any buffered sequences.
+ */
 function parseInputEvents(sequence: string, flush = false): InputEvent[] {
   const [items, state] = parseMultipleKeypresses(INITIAL_STATE, sequence)
   let allItems = items
@@ -14,7 +19,15 @@ function parseInputEvents(sequence: string, flush = false): InputEvent[] {
     const [flushedItems] = parseMultipleKeypresses(state, null)
     allItems = [...items, ...flushedItems]
   }
-  return allItems.filter(item => item.kind === 'key').map(item => new InputEvent(item as ParsedKey))
+
+  const events: InputEvent[] = []
+  for (const item of allItems) {
+    if (item.kind === 'key') {
+      events.push(new InputEvent(item))
+    }
+  }
+
+  return events
 }
 
 test('meta key no longer falls back for meta + up arrow', () => {
