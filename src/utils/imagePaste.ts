@@ -38,22 +38,11 @@ export const LINUX_CLIPBOARD_IMAGE_MIME_TYPES = [
   'image/bmp',
 ]
 
-export function buildLinuxClipboardCheckCommand(): string {
-  const mimePattern = LINUX_CLIPBOARD_IMAGE_MIME_TYPES.map(mimeType =>
-    mimeType.replace('/', '\\/'),
-  ).join('|')
-
-  return `xclip -selection clipboard -t TARGETS -o 2>/dev/null | grep -E "${mimePattern}" || wl-paste -l 2>/dev/null | grep -E "${mimePattern}"`
+function escapeRegex(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-export function buildLinuxClipboardSaveCommand(screenshotPath: string): string {
-  return LINUX_CLIPBOARD_IMAGE_MIME_TYPES.flatMap(mimeType => [
-    `xclip -selection clipboard -t ${mimeType} -o > "${screenshotPath}" 2>/dev/null`,
-    `wl-paste --type ${mimeType} > "${screenshotPath}" 2>/dev/null`,
-  ]).join(' || ')
-}
-
-function getClipboardCommands() {
+function getScreenshotPath(): string {
   const platform = process.platform as SupportedPlatform
 
   // Platform-specific temporary file paths
@@ -68,45 +57,39 @@ function getClipboardCommands() {
     win32: join(baseTmpDir, screenshotFilename),
   }
 
-  const screenshotPath = tempPaths[platform] || tempPaths.linux
-
-  // Platform-specific clipboard commands
-  const commands: Record<
-    SupportedPlatform,
-    {
-      checkImage: string
-      saveImage: string
-      getPath: string
-      deleteFile: string
-    }
-  > = {
-    darwin: {
-      checkImage: `osascript -e 'the clipboard as «class PNGf»'`,
-      saveImage: `osascript -e 'set png_data to (the clipboard as «class PNGf»)' -e 'set fp to open for access POSIX file "${screenshotPath}" with write permission' -e 'write png_data to fp' -e 'close access fp'`,
-      getPath: `osascript -e 'get POSIX path of (the clipboard as «class furl»)'`,
-      deleteFile: `rm -f "${screenshotPath}"`,
-    },
-    linux: {
-      checkImage: buildLinuxClipboardCheckCommand(),
-      saveImage: buildLinuxClipboardSaveCommand(screenshotPath),
-      getPath:
-        'xclip -selection clipboard -t text/plain -o 2>/dev/null || wl-paste 2>/dev/null',
-      deleteFile: `rm -f "${screenshotPath}"`,
-    },
-    win32: {
-      checkImage:
-        'powershell -NoProfile -Command "(Get-Clipboard -Format Image) -ne $null"',
-      saveImage: `powershell -NoProfile -Command "$img = Get-Clipboard -Format Image; if ($img) { $img.Save('${screenshotPath.replace(/\\/g, '\\\\')}', [System.Drawing.Imaging.ImageFormat]::Png) }"`,
-      getPath: 'powershell -NoProfile -Command "Get-Clipboard"',
-      deleteFile: `del /f "${screenshotPath}"`,
-    },
-  }
-
-  return {
-    commands: commands[platform] || commands.linux,
-    screenshotPath,
-  }
+  return tempPaths[platform] || tempPaths.linux
 }
+
+async function checkLinuxClipboardImage(): Promise<boolean> {
+  const mimePattern = LINUX_CLIPBOARD_IMAGE_MIME_TYPES.map(escapeRegex).join('|')
+
+  // Try xclip
+  let result = await execFileNoThrowWithCwd('xclip', [
+    '-selection',
+    'clipboard',
+    '-t',
+    'TARGETS',
+    '-o',
+  ])
+  if (
+    result.code === 0 &&
+    new RegExp(mimePattern, 'i').test(result.stdout || '')
+  ) {
+    return true
+  }
+
+  // Try wl-paste
+  result = await execFileNoThrowWithCwd('wl-paste', ['-l'])
+  if (
+    result.code === 0 &&
+    new RegExp(mimePattern, 'i').test(result.stdout || '')
+  ) {
+    return true
+  }
+
+  return false
+}
+
 
 export type ImageWithDimensions = {
   base64: string
@@ -118,10 +101,8 @@ export type ImageWithDimensions = {
  * Check if clipboard contains an image without retrieving it.
  */
 export async function hasImageInClipboard(): Promise<boolean> {
-  if (process.platform !== 'darwin') {
-    return false
-  }
   if (
+    process.platform === 'darwin' &&
     feature('NATIVE_CLIPBOARD_IMAGE') &&
     getFeatureValue_CACHED_MAY_BE_STALE('tengu_collage_kaleidoscope', true)
   ) {
@@ -138,11 +119,122 @@ export async function hasImageInClipboard(): Promise<boolean> {
       logError(e as Error)
     }
   }
-  const result = await execFileNoThrowWithCwd('osascript', [
-    '-e',
-    'the clipboard as «class PNGf»',
-  ])
-  return result.code === 0
+
+  return getClipboardProvider().hasImage()
+}
+
+interface ClipboardProvider {
+  hasImage(): Promise<boolean>
+  saveImage(screenshotPath: string): Promise<boolean>
+  getPath(): Promise<string | null>
+}
+
+const DarwinClipboard: ClipboardProvider = {
+  async hasImage() {
+    const result = await execFileNoThrowWithCwd('osascript', [
+      '-e',
+      'the clipboard as «class PNGf»',
+    ])
+    return result.code === 0
+  },
+  async saveImage(screenshotPath) {
+    const escapedPath = screenshotPath.replace(/"/g, '\\"')
+    const result = await execFileNoThrowWithCwd('osascript', [
+      '-e',
+      'set png_data to (the clipboard as «class PNGf»)',
+      '-e',
+      `set fp to open for access POSIX file "${escapedPath}" with write permission`,
+      '-e',
+      'write png_data to fp',
+      '-e',
+      'close access fp',
+    ])
+    return result.code === 0
+  },
+  async getPath() {
+    const result = await execFileNoThrowWithCwd('osascript', [
+      '-e',
+      'get POSIX path of (the clipboard as «class furl»)',
+    ])
+    return result.code === 0 ? result.stdout.trim() : null
+  },
+}
+
+const Win32Clipboard: ClipboardProvider = {
+  async hasImage() {
+    const result = await execFileNoThrowWithCwd('powershell', [
+      '-NoProfile',
+      '-Command',
+      '(Get-Clipboard -Format Image) -ne $null',
+    ])
+    return result.code === 0 && result.stdout.trim() === 'True'
+  },
+  async saveImage(screenshotPath) {
+    const escapedPath = screenshotPath.replace(/'/g, "''")
+    const result = await execFileNoThrowWithCwd('powershell', [
+      '-NoProfile',
+      '-Command',
+      `$img = Get-Clipboard -Format Image; if ($img) { $img.Save('${escapedPath}', [System.Drawing.Imaging.ImageFormat]::Png) }`,
+    ])
+    return result.code === 0
+  },
+  async getPath() {
+    const result = await execFileNoThrowWithCwd('powershell', [
+      '-NoProfile',
+      '-Command',
+      'Get-Clipboard',
+    ])
+    return result.code === 0 ? result.stdout.trim() : null
+  },
+}
+
+const LinuxClipboard: ClipboardProvider = {
+  async hasImage() {
+    return checkLinuxClipboardImage()
+  },
+  async saveImage(screenshotPath) {
+    for (const mimeType of LINUX_CLIPBOARD_IMAGE_MIME_TYPES) {
+      try {
+        let result = await execa(
+          'xclip',
+          ['-selection', 'clipboard', '-t', mimeType, '-o'],
+          {
+            stdout: { file: screenshotPath },
+            reject: false,
+          },
+        )
+        if (result.exitCode === 0) return true
+
+        result = await execa('wl-paste', ['--type', mimeType], {
+          stdout: { file: screenshotPath },
+          reject: false,
+        })
+        if (result.exitCode === 0) return true
+      } catch {
+        continue
+      }
+    }
+    return false
+  },
+  async getPath() {
+    let result = await execFileNoThrowWithCwd('xclip', [
+      '-selection',
+      'clipboard',
+      '-t',
+      'text/plain',
+      '-o',
+    ])
+    if (result.code !== 0) {
+      result = await execFileNoThrowWithCwd('wl-paste', [])
+    }
+    return result.code === 0 ? result.stdout.trim() : null
+  },
+}
+
+function getClipboardProvider(): ClipboardProvider {
+  if (process.platform === 'darwin') return DarwinClipboard
+  if (process.platform === 'win32') return Win32Clipboard
+  return LinuxClipboard
 }
 
 export async function getImageFromClipboard(): Promise<ImageWithDimensions | null> {
@@ -207,23 +299,14 @@ export async function getImageFromClipboard(): Promise<ImageWithDimensions | nul
     }
   }
 
-  const { commands, screenshotPath } = getClipboardCommands()
+  const screenshotPath = getScreenshotPath()
+  const provider = getClipboardProvider()
   try {
-    // Check if clipboard has image
-    const checkResult = await execa(commands.checkImage, {
-      shell: true,
-      reject: false,
-    })
-    if (checkResult.exitCode !== 0) {
+    if (!(await provider.hasImage())) {
       return null
     }
 
-    // Save the image
-    const saveResult = await execa(commands.saveImage, {
-      shell: true,
-      reject: false,
-    })
-    if (saveResult.exitCode !== 0) {
+    if (!(await provider.saveImage(screenshotPath))) {
       return null
     }
 
@@ -253,7 +336,7 @@ export async function getImageFromClipboard(): Promise<ImageWithDimensions | nul
     const mediaType = detectImageFormatFromBase64(base64Image)
 
     // Cleanup (fire-and-forget, don't await)
-    void execa(commands.deleteFile, { shell: true, reject: false })
+    void getFsImplementation().rm(screenshotPath, { force: true })
 
     return {
       base64: base64Image,
@@ -266,18 +349,8 @@ export async function getImageFromClipboard(): Promise<ImageWithDimensions | nul
 }
 
 export async function getImagePathFromClipboard(): Promise<string | null> {
-  const { commands } = getClipboardCommands()
-
   try {
-    // Try to get text from clipboard
-    const result = await execa(commands.getPath, {
-      shell: true,
-      reject: false,
-    })
-    if (result.exitCode !== 0 || !result.stdout) {
-      return null
-    }
-    return result.stdout.trim()
+    return await getClipboardProvider().getPath()
   } catch (e) {
     logError(e as Error)
     return null
