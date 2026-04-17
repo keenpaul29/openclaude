@@ -425,7 +425,8 @@ export function ManagePlugins({
   const {
     query: searchQuery,
     setQuery: setSearchQuery,
-    cursorOffset: searchCursorOffset
+    cursorOffset: searchCursorOffset,
+    handleKeyDown
   } = useSearchInput({
     isActive: viewState === 'plugin-list' && isSearchMode,
     onExit: () => {
@@ -2129,7 +2130,7 @@ export function ManagePlugins({
 
   // Plugin list view (main management interface)
   const visibleItems = pagination.getVisibleItems(filteredItems);
-  return <Box flexDirection="column">
+  return <Box flexDirection="column" onKeyDown={handleKeyDown}>
       {/* Search box */}
       <Box marginBottom={1}>
         <SearchBox query={searchQuery} isFocused={isSearchMode} isTerminalFocused={isTerminalFocused} width={terminalWidth - 4} cursorOffset={searchCursorOffset} />

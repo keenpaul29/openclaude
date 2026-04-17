@@ -471,7 +471,7 @@ type Props = {
   onRetryDenials?: (commands: string[]) => void;
 };
 export function PermissionRuleList(t0) {
-  const $ = _c(113);
+  const $ = _c(114);
   const {
     onExit,
     initialTab,
@@ -668,11 +668,15 @@ export function PermissionRuleList(t0) {
   const {
     query: searchQuery,
     setQuery: setSearchQuery,
-    cursorOffset: searchCursorOffset
+    cursorOffset: searchCursorOffset,
+    handleKeyDown: searchHandleKeyDown
   } = useSearchInput(t9);
   let t10;
-  if ($[18] !== isSearchMode || $[19] !== isSearchModeActive || $[20] !== setSearchQuery) {
+  if ($[18] !== isSearchMode || $[19] !== isSearchModeActive || $[20] !== setSearchQuery || $[113] !== searchHandleKeyDown) {
     t10 = e => {
+      if (isSearchMode) {
+        searchHandleKeyDown(e);
+      }
       if (!isSearchModeActive) {
         return;
       }
@@ -697,6 +701,7 @@ export function PermissionRuleList(t0) {
     $[18] = isSearchMode;
     $[19] = isSearchModeActive;
     $[20] = setSearchQuery;
+    $[113] = searchHandleKeyDown;
     $[21] = t10;
   } else {
     t10 = $[21];

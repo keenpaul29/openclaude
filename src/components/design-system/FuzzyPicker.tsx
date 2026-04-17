@@ -112,7 +112,8 @@ export function FuzzyPicker<T>({
   // a held backspace doesn't eject the user from the dialog.
   const {
     query,
-    cursorOffset
+    cursorOffset,
+    handleKeyDown: searchHandleKeyDown
   } = useSearchInput({
     isActive: true,
     onExit: () => {},
@@ -121,6 +122,9 @@ export function FuzzyPicker<T>({
     backspaceExitsOnEmpty: false
   });
   const handleKeyDown = (e: KeyboardEvent) => {
+    searchHandleKeyDown(e);
+    if (e.defaultPrevented) return;
+
     if (e.key === 'up' || e.ctrl && e.key === 'p') {
       e.preventDefault();
       e.stopImmediatePropagation();

@@ -394,7 +394,8 @@ function TranscriptSearchBar({
 }): React.ReactNode {
   const {
     query,
-    cursorOffset
+    cursorOffset,
+    handleKeyDown
   } = useSearchInput({
     isActive: true,
     initialQuery,
@@ -451,7 +452,7 @@ function TranscriptSearchBar({
   }, [query, warmDone]);
   const off = cursorOffset;
   const cursorChar = off < query.length ? query[off] : ' ';
-  return <Box borderTopDimColor borderBottom={false} borderLeft={false} borderRight={false} borderStyle="single" marginTop={1} paddingLeft={2} width="100%"
+  return <Box onKeyDown={handleKeyDown} borderTopDimColor borderBottom={false} borderLeft={false} borderRight={false} borderStyle="single" marginTop={1} paddingLeft={2} width="100%"
     // applySearchHighlight scans the whole screen buffer. The query
     // text rendered here IS on screen — /foo matches its own 'foo' in
     // the bar. With no content matches that's the ONLY visible match →
