@@ -1079,10 +1079,7 @@ async function detectRunningIDEsImpl(): Promise<IdeType[]> {
     const platform = getPlatform()
     if (platform === 'macos') {
       // On macOS, use ps with process name matching
-      const result = await execa(
-        'ps aux | grep -E "Visual Studio Code|Code Helper|Cursor Helper|Windsurf Helper|IntelliJ IDEA|PyCharm|WebStorm|PhpStorm|RubyMine|CLion|GoLand|Rider|DataGrip|AppCode|DataSpell|Aqua|Gateway|Fleet|Android Studio" | grep -v grep',
-        { shell: true, reject: false },
-      )
+      const result = await execa('ps', ['aux'], { reject: false })
       const stdout = result.stdout ?? ''
       for (const [ide, config] of Object.entries(supportedIdeConfigs)) {
         for (const keyword of config.processKeywordsMac) {
@@ -1094,10 +1091,7 @@ async function detectRunningIDEsImpl(): Promise<IdeType[]> {
       }
     } else if (platform === 'windows') {
       // On Windows, use tasklist with findstr for multiple patterns
-      const result = await execa(
-        'tasklist | findstr /I "Code.exe Cursor.exe Windsurf.exe idea64.exe pycharm64.exe webstorm64.exe phpstorm64.exe rubymine64.exe clion64.exe goland64.exe rider64.exe datagrip64.exe appcode.exe dataspell64.exe aqua64.exe gateway64.exe fleet.exe studio64.exe"',
-        { shell: true, reject: false },
-      )
+      const result = await execa('tasklist', [], { reject: false })
       const stdout = result.stdout ?? ''
 
       const normalizedStdout = stdout.toLowerCase()
@@ -1112,10 +1106,7 @@ async function detectRunningIDEsImpl(): Promise<IdeType[]> {
       }
     } else if (platform === 'linux') {
       // On Linux, use ps with process name matching
-      const result = await execa(
-        'ps aux | grep -E "code|cursor|windsurf|idea|pycharm|webstorm|phpstorm|rubymine|clion|goland|rider|datagrip|dataspell|aqua|gateway|fleet|android-studio" | grep -v grep',
-        { shell: true, reject: false },
-      )
+      const result = await execa('ps', ['aux'], { reject: false })
       const stdout = result.stdout ?? ''
 
       const normalizedStdout = stdout.toLowerCase()
@@ -1364,8 +1355,7 @@ const detectHostIP = memoize(
     // Windows, then we must use a different IP address to connect to the extension.
     // https://learn.microsoft.com/en-us/windows/wsl/networking
     try {
-      const routeResult = await execa('ip route show | grep -i default', {
-        shell: true,
+      const routeResult = await execa('ip', ['route', 'show'], {
         reject: false,
       })
       if (routeResult.exitCode === 0 && routeResult.stdout) {
