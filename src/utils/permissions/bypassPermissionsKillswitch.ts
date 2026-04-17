@@ -1,11 +1,7 @@
 import { feature } from 'bun:bundle'
 import { useEffect, useRef } from 'react'
-import {
-  type AppState,
-  useAppState,
-  useAppStateStore,
-  useSetAppState,
-} from 'src/state/AppState.js'
+import { useAppState, useAppStateStore, useSetAppState } from 'src/state/AppState.js'
+import { type AppState } from 'src/state/AppStateStore.js'
 import type { ToolPermissionContext } from 'src/Tool.js'
 import { getIsRemoteMode } from '../../bootstrap/state.js'
 import {

@@ -13,7 +13,7 @@ import {
   logEvent,
 } from '../../services/analytics/index.js'
 import { clearDumpState } from '../../services/api/dumpPrompts.js'
-import type { AppState } from '../../state/AppState.js'
+import { AppState } from '../../state/AppStateStore.js'
 import type {
   Tool,
   ToolPermissionContext,

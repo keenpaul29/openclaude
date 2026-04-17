@@ -3,7 +3,7 @@ import * as React from 'react';
 import { useMemo } from 'react';
 import { Box, Text } from 'src/ink.js';
 import { useAppState } from 'src/state/AppState.js';
-import type { AppState } from 'src/state/AppState.js';
+import { AppState } from 'src/state/AppStateStore.js';
 import { STATUS_TAG, SUMMARY_TAG, TASK_NOTIFICATION_TAG } from '../../constants/xml.js';
 import { QueuedMessageProvider } from '../../context/QueuedMessageContext.js';
 import { useCommandQueue } from '../../hooks/useCommandQueue.js';

@@ -5,12 +5,8 @@ import type { ToolUseConfirm } from '../components/permissions/PermissionRequest
 import { TEAMMATE_MESSAGE_TAG } from '../constants/xml.js'
 import { useTerminalNotification } from '../ink/useTerminalNotification.js'
 import { sendNotification } from '../services/notifier.js'
-import {
-  type AppState,
-  useAppState,
-  useAppStateStore,
-  useSetAppState,
-} from '../state/AppState.js'
+import { useAppState, useAppStateStore, useSetAppState } from '../state/AppState.js'
+import { type AppState } from '../state/AppStateStore.js'
 import { findToolByName } from '../Tool.js'
 import { isInProcessTeammateTask } from '../tasks/InProcessTeammateTask/types.js'
 import { getAllBaseTools } from '../tools.js'

@@ -10,7 +10,8 @@ import { stringWidth } from '../../ink/stringWidth.js';
 import { Box, Text, useInput } from '../../ink.js';
 import { useKeybindings } from '../../keybindings/useKeybinding.js';
 import { useShortcutDisplay } from '../../keybindings/useShortcutDisplay.js';
-import { type AppState, useAppState, useSetAppState } from '../../state/AppState.js';
+import { useAppState, useSetAppState } from '../../state/AppState.js'
+import { type AppState } from '../../state/AppStateStore.js';
 import { getEmptyToolPermissionContext } from '../../Tool.js';
 import { AGENT_COLOR_TO_THEME_COLOR } from '../../tools/AgentTool/agentColorManager.js';
 import { logForDebugging } from '../../utils/debug.js';
