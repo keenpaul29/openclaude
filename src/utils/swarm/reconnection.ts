@@ -6,7 +6,7 @@
  * - Resumed sessions: Initialize from teamName/agentName stored in the transcript
  */
 
-import type { AppState } from '../../state/AppState.js'
+import { AppState } from '../../state/AppStateStore.js'
 import { logForDebugging } from '../debug.js'
 import { logError } from '../log.js'
 import { getDynamicTeamContext } from '../teammate.js'
