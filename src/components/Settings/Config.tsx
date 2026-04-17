@@ -178,7 +178,8 @@ export function Config({
   const {
     query: searchQuery,
     setQuery: setSearchQuery,
-    cursorOffset: searchCursorOffset
+    cursorOffset: searchCursorOffset,
+    handleKeyDown: searchHandleKeyDown
   } = useSearchInput({
     isActive: isSearchMode && showSubmenu === null && !headerFocused,
     onExit: () => setIsSearchMode(false),
@@ -1444,6 +1445,12 @@ export function Config({
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (showSubmenu !== null) return;
     if (headerFocused) return;
+
+    // Route event to search input first if in search mode
+    if (isSearchMode) {
+      searchHandleKeyDown(e);
+    }
+
     // Search mode: Esc clears then exits, Enter/↓ moves to the list.
     if (isSearchMode) {
       if (e.key === 'escape') {
@@ -1482,7 +1489,7 @@ export function Config({
       setIsSearchMode(true);
       setSearchQuery(e.key);
     }
-  }, [showSubmenu, headerFocused, isSearchMode, searchQuery, setSearchQuery, toggleSetting]);
+  }, [showSubmenu, headerFocused, isSearchMode, searchQuery, setSearchQuery, toggleSetting, searchHandleKeyDown]);
   return <Box flexDirection="column" width="100%" tabIndex={0} autoFocus onKeyDown={handleKeyDown}>
       {showSubmenu === 'Theme' ? <>
           <ThemePicker onThemeSelect={setting_1 => {

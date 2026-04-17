@@ -73,7 +73,8 @@ export function DiscoverPlugins({
   const {
     query: searchQuery,
     setQuery: setSearchQuery,
-    cursorOffset: searchCursorOffset
+    cursorOffset: searchCursorOffset,
+    handleKeyDown
   } = useSearchInput({
     isActive: viewState === 'plugin-list' && isSearchMode && !loading,
     onExit: () => {
@@ -569,7 +570,7 @@ export function DiscoverPlugins({
 
   // Get visible plugins from pagination
   const visiblePlugins = pagination.getVisibleItems(filteredPlugins);
-  return <Box flexDirection="column">
+  return <Box flexDirection="column" onKeyDown={handleKeyDown}>
       <Box>
         <Text bold>Discover plugins</Text>
         {pagination.needsPagination && <Text dimColor>
