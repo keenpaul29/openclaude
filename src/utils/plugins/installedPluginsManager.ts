@@ -1007,15 +1007,15 @@ async function getGitCommitSha(dirPath: string): Promise<string | undefined> {
 /**
  * Try to read version from plugin manifest
  */
-function getPluginVersionFromManifest(
+async function getPluginVersionFromManifest(
   pluginCachePath: string,
   pluginId: string,
-): string {
+): Promise<string> {
   const fs = getFsImplementation()
   const manifestPath = join(pluginCachePath, '.claude-plugin', 'plugin.json')
 
   try {
-    const manifestContent = fs.readFileSync(manifestPath, { encoding: 'utf-8' })
+    const manifestContent = await fs.readFile(manifestPath, { encoding: 'utf-8' })
     const manifest = jsonParse(manifestContent)
     return manifest.version || 'unknown'
   } catch {
@@ -1192,8 +1192,10 @@ export async function migrateFromEnabledPlugins(): Promise<void> {
 
         if (typeof entry.source === 'string') {
           installPath = join(marketplaceInstallLocation, entry.source)
-          version = getPluginVersionFromManifest(installPath, pluginId)
-          gitCommitSha = await getGitCommitSha(installPath)
+          ;[version, gitCommitSha] = await Promise.all([
+            getPluginVersionFromManifest(installPath, pluginId),
+            getGitCommitSha(installPath),
+          ])
         } else {
           const cachePath = getPluginCachePath()
           const sanitizedName = pluginName.replace(/[^a-zA-Z0-9-_]/g, '-')
@@ -1221,11 +1223,14 @@ export async function migrateFromEnabledPlugins(): Promise<void> {
           installPath = pluginCachePath
 
           // Only read manifest if the .claude-plugin dir is present
-          if (dirEntries.includes('.claude-plugin')) {
-            version = getPluginVersionFromManifest(pluginCachePath, pluginId)
-          }
+          const versionPromise = dirEntries.includes('.claude-plugin')
+            ? getPluginVersionFromManifest(pluginCachePath, pluginId)
+            : Promise.resolve(version)
 
-          gitCommitSha = await getGitCommitSha(pluginCachePath)
+          ;[version, gitCommitSha] = await Promise.all([
+            versionPromise,
+            getGitCommitSha(pluginCachePath),
+          ])
         }
 
         if (version === 'unknown' && entry.version) {
